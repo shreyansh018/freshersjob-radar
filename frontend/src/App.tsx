@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import "./style.css";
 
 type Job = {
@@ -21,11 +21,7 @@ type Job = {
 
 const API = "http://127.0.0.1:8000/api";
 
-// Clean HTML, encoded tags and entities from job descriptions.
 function cleanDescription(raw: string = ""): string {
-  let text = raw;
-
-  // Decode common HTML entities and escaped markup.
   const entities: Record<string, string> = {
     "&nbsp;": " ",
     "&amp;": "&",
@@ -39,6 +35,8 @@ function cleanDescription(raw: string = ""): string {
     "&bull;": "•",
   };
 
+  let text = raw;
+
   for (let i = 0; i < 3; i++) {
     text = text.replace(
       /&(?:nbsp|amp|lt|gt|quot|apos|ndash|mdash|bull);|&#39;/gi,
@@ -46,90 +44,112 @@ function cleanDescription(raw: string = ""): string {
     );
   }
 
-  // Remove script and style blocks entirely.
   text = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ");
   text = text.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ");
 
-  // Convert common structural tags to spaces.
   text = text.replace(
     /<\/?(?:p|div|h[1-6]|li|ul|ol|br|section|article|tr|td|th)[^>]*>/gi,
     " ",
   );
 
-  // Remove remaining HTML tags.
   text = text.replace(/<[^>]*>/g, " ");
-
-  // Remove leftover encoded markup.
   text = text.replace(/&lt;[^&]*&gt;/gi, " ");
 
-  // Normalize whitespace.
   return text.replace(/\s+/g, " ").trim();
 }
 
 function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
+
+  // Input values: what the user is currently typing.
   const [keyword, setKeyword] = useState("");
   const [city, setCity] = useState("");
+
+  // Applied filters: what the API is actually using.
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [appliedCity, setAppliedCity] = useState("");
   const [role, setRole] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function fetchJobs() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const params = new URLSearchParams({
-        fresher_only: "true",
-      });
-
-      if (keyword.trim()) params.set("keyword", keyword.trim());
-      if (city.trim()) params.set("city", city.trim());
-      if (role.trim()) params.set("role", role.trim());
-
-      const response = await fetch(`${API}/jobs?${params.toString()}`);
-
-      if (!response.ok) {
-        throw new Error("Unable to fetch jobs.");
-      }
-
-      const data = await response.json();
-      setJobs(data.jobs ?? []);
-    } catch {
-      setError(
-        "Couldn't connect to the job database. Make sure the backend is running.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    fetchJobs();
-  }, []);
+    const controller = new AbortController();
 
-  const cities = useMemo(
-    () =>
-      Array.from(
-        new Set(jobs.map((job) => job.city || job.location).filter(Boolean)),
-      ),
-    [jobs],
-  );
+    async function loadJobs() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const params = new URLSearchParams({
+          fresher_only: "true",
+        });
+
+        if (appliedKeyword.trim()) {
+          params.set("keyword", appliedKeyword.trim());
+        }
+
+        if (appliedCity.trim()) {
+          params.set("city", appliedCity.trim());
+        }
+
+        if (role.trim()) {
+          params.set("role", role.trim());
+        }
+
+        const response = await fetch(`${API}/jobs?${params.toString()}`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to fetch jobs.");
+        }
+
+        const data = await response.json();
+        setJobs(data.jobs ?? []);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        setError(
+          "Couldn't connect to the job database. Make sure the backend is running.",
+        );
+        setJobs([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadJobs();
+
+    return () => controller.abort();
+  }, [appliedKeyword, appliedCity, role]);
 
   function handleSearch(event: React.FormEvent) {
     event.preventDefault();
-    fetchJobs();
+    setAppliedKeyword(keyword);
+    setAppliedCity(city);
   }
 
   function resetFilters() {
     setKeyword("");
     setCity("");
+    setAppliedKeyword("");
+    setAppliedCity("");
     setRole("");
-
-    setTimeout(() => {
-      fetchJobs();
-    }, 0);
   }
+
+  const roles = [
+    "",
+    "Software Engineering",
+    "Operations",
+    "Marketing",
+    "HR",
+    "Customer Support",
+  ];
 
   return (
     <div className="app-shell">
@@ -257,28 +277,23 @@ function App() {
             <div className="filter-label">FILTER BY ROLE</div>
 
             <div className="role-filters">
-              {[
-                "",
-                "Software Engineering",
-                "Operations",
-                "Marketing",
-                "HR",
-                "Customer Support",
-              ].map((item) => (
+              {roles.map((item) => (
                 <button
                   key={item || "all"}
+                  type="button"
                   className={`filter-chip ${role === item ? "active" : ""}`}
-                  onClick={() => {
-                    setRole(item);
-                    setTimeout(() => fetchJobs(), 0);
-                  }}
+                  onClick={() => setRole(item)}
                 >
                   {item || "All roles"}
                 </button>
               ))}
             </div>
 
-            <button className="clear-filters" onClick={resetFilters}>
+            <button
+              type="button"
+              className="clear-filters"
+              onClick={resetFilters}
+            >
               Reset ↺
             </button>
           </div>
@@ -291,14 +306,18 @@ function App() {
           ) : error ? (
             <div className="state-panel error-panel">
               <p>{error}</p>
-              <button onClick={fetchJobs}>Retry ↻</button>
+              <button type="button" onClick={resetFilters}>
+                Reset ↻
+              </button>
             </div>
           ) : jobs.length === 0 ? (
             <div className="state-panel empty-panel">
               <div className="empty-icon">⌕</div>
               <h3>No jobs found on this scan.</h3>
               <p>Try changing your search or filters.</p>
-              <button onClick={resetFilters}>Clear filters</button>
+              <button type="button" onClick={resetFilters}>
+                Clear filters
+              </button>
             </div>
           ) : (
             <div className="job-grid">
