@@ -1,3 +1,4 @@
+
 import asyncio
 import time
 
@@ -7,6 +8,12 @@ from app.pipeline.sources import GREENHOUSE_SOURCES, LEVER_SOURCES
 from app.pipeline.filters import filter_target_jobs
 from app.pipeline.dedup import deduplicate_jobs
 from app.pipeline.classifier import classify_job
+from app.pipeline.classification_cache import (
+    initialize_cache,
+    get_cached_classification,
+    save_classification,
+    get_cache_stats,
+)
 
 
 MAX_SOURCE_CONCURRENCY = 5
@@ -16,8 +23,14 @@ MAX_AI_CONCURRENCY = 3
 async def run_ingestion():
     start_time = time.perf_counter()
 
+    initialize_cache()
+
     source_semaphore = asyncio.Semaphore(MAX_SOURCE_CONCURRENCY)
     ai_semaphore = asyncio.Semaphore(MAX_AI_CONCURRENCY)
+
+    cache_hits = 0
+    cache_misses = 0
+    actual_ai_calls = 0
 
     source_configs = [
         ("greenhouse", source)
@@ -131,24 +144,84 @@ async def run_ingestion():
         flush=True,
     )
 
-    # STEP 4: CLASSIFY
+    # STEP 4: CLASSIFY WITH CACHE
 
     total_to_classify = len(unique_jobs)
     completed_count = 0
 
     print(
-        f"[AI] Classifying {total_to_classify} jobs...",
+        f"[AI] Processing {total_to_classify} jobs...",
         flush=True,
     )
 
+    def apply_result_to_job(job, result):
+        job.role_category = result.get("role_category")
+        job.city = result.get("city")
+        job.experience_level = result.get("experience_level")
+        job.job_type = result.get("job_type")
+        job.is_fresher_friendly = result.get(
+            "is_fresher_friendly"
+        )
+        job.classification_confidence = result.get(
+            "confidence"
+        )
+        job.classification_reasoning = result.get(
+            "reasoning"
+        )
+        job.classification_error = None
+        job.ai_status = "success"
+
     async def classify_one(job):
         nonlocal completed_count
+        nonlocal cache_hits
+        nonlocal cache_misses
+        nonlocal actual_ai_calls
 
         async with ai_semaphore:
             job_start = time.perf_counter()
 
+            # CACHE LOOKUP
+            try:
+                cached_result = get_cached_classification(job)
+
+            except Exception as exc:
+                print(
+                    f"[CACHE ERROR] {job.title} | {exc}",
+                    flush=True,
+                )
+                cached_result = None
+
+            if cached_result is not None:
+                cache_hits += 1
+
+                apply_result_to_job(job, cached_result)
+
+                elapsed = round(
+                    time.perf_counter() - job_start, 2
+                )
+
+                completed_count += 1
+
+                print(
+                    f"[CACHE HIT {completed_count}/"
+                    f"{total_to_classify}] {job.title} | "
+                    f"{elapsed}s",
+                    flush=True,
+                )
+
+                return {
+                    "job": job,
+                    "status": "success",
+                    "cached": True,
+                    "error": None,
+                }
+
+            # CACHE MISS
+            cache_misses += 1
+            actual_ai_calls += 1
+
             print(
-                f"[AI START] {job.company} | {job.title}",
+                f"[CACHE MISS] {job.company} | {job.title}",
                 flush=True,
             )
 
@@ -158,22 +231,23 @@ async def run_ingestion():
                     job,
                 )
 
-                job.role_category = result.role_category
-                job.city = result.city
-                job.experience_level = result.experience_level
-                job.job_type = result.job_type
-                job.is_fresher_friendly = (
-                    result.is_fresher_friendly
-                )
-                job.classification_confidence = (
-                    result.confidence
-                )
-                job.classification_reasoning = (
-                    result.reasoning
-                )
+                result_dict = result.model_dump()
 
-                job.classification_error = None
-                job.ai_status = "success"
+                apply_result_to_job(job, result_dict)
+
+                # SAVE SUCCESSFUL CLASSIFICATION
+                try:
+                    save_classification(
+                        job,
+                        result_dict,
+                    )
+
+                except Exception as exc:
+                    print(
+                        f"[CACHE SAVE ERROR] "
+                        f"{job.title} | {exc}",
+                        flush=True,
+                    )
 
                 elapsed = round(
                     time.perf_counter() - job_start, 2
@@ -193,6 +267,7 @@ async def run_ingestion():
                 return {
                     "job": job,
                     "status": "success",
+                    "cached": False,
                     "error": None,
                 }
 
@@ -216,6 +291,7 @@ async def run_ingestion():
                 return {
                     "job": job,
                     "status": "failed",
+                    "cached": False,
                     "error": str(exc),
                 }
 
@@ -264,8 +340,19 @@ async def run_ingestion():
         time.perf_counter() - start_time, 2
     )
 
+    cache_stats = get_cache_stats()
+
     print(
         "\n[COMPLETE] Ingestion pipeline finished.",
+        flush=True,
+    )
+
+    print(
+        f"[CACHE REPORT] Hits: {cache_hits} | "
+        f"Misses: {cache_misses} | "
+        f"Actual Gemini calls: {actual_ai_calls} | "
+        f"Stored classifications: "
+        f"{cache_stats['cached_classifications']}",
         flush=True,
     )
 
@@ -277,6 +364,12 @@ async def run_ingestion():
         "ai_success_count": ai_success_count,
         "ai_failure_count": ai_failure_count,
         "ai_rejected_count": ai_rejected_count,
+        "cache_hits": cache_hits,
+        "cache_misses": cache_misses,
+        "actual_ai_calls": actual_ai_calls,
+        "cached_classifications": cache_stats[
+            "cached_classifications"
+        ],
         "total_jobs": len(final_jobs),
         "successful_sources": sum(
             result["status"] == "success"

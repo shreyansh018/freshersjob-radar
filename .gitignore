@@ -13,3 +13,7 @@ venv/
 
 # IDE
 .vscode/
+
+# Local database
+backend/data/
+*.db
