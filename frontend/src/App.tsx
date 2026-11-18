@@ -1,7 +1,332 @@
-export default function App() {
-  return <main className="shell">
-    <header><div className="brand">FR<span>•</span></div><div><h1>FreshersJob Radar</h1><p>AI-curated opportunities for India's early-career talent</p></div></header>
-    <section className="hero"><span className="eyebrow">EARLY CAREER · INDIA</span><h2>Find your next opportunity.</h2><p>We are building a fresh, searchable feed of fresher jobs and internships.</p></section>
-    <section className="empty"><h3>Pipeline coming online</h3><p>Job discovery, deduplication, AI tagging and search will appear here as we build.</p></section>
-  </main>;
+import { useEffect, useMemo, useState } from "react";
+import "./style.css";
+
+type Job = {
+  source: string;
+  source_id: string;
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  url: string;
+  posted_at?: string | null;
+  workplace_type?: string | null;
+  role_category?: string | null;
+  city?: string | null;
+  experience_level?: string | null;
+  job_type?: string | null;
+  is_fresher_friendly?: boolean | null;
+  classification_confidence?: number | null;
+};
+
+const API = "http://127.0.0.1:8000/api";
+
+function App() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [keyword, setKeyword] = useState("");
+  const [city, setCity] = useState("");
+  const [role, setRole] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function fetchJobs() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const params = new URLSearchParams({ fresher_only: "true" });
+      if (keyword.trim()) params.set("keyword", keyword.trim());
+      if (city.trim()) params.set("city", city.trim());
+      if (role.trim()) params.set("role", role.trim());
+
+      const response = await fetch(`${API}/jobs?${params.toString()}`);
+      if (!response.ok) throw new Error("Unable to fetch jobs.");
+
+      const data = await response.json();
+      setJobs(data.jobs ?? []);
+    } catch {
+      setError(
+        "Couldn't connect to the job database. Make sure the backend is running.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  const cities = useMemo(
+    () =>
+      Array.from(
+        new Set(jobs.map((job) => job.city || job.location).filter(Boolean)),
+      ),
+    [jobs],
+  );
+
+  function handleSearch(event: React.FormEvent) {
+    event.preventDefault();
+    fetchJobs();
+  }
+
+  function resetFilters() {
+    setKeyword("");
+    setCity("");
+    setRole("");
+    setTimeout(fetchJobs, 0);
+  }
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="#">
+          <span className="brand-mark">✳</span>
+          <span>
+            FreshersJob<span className="brand-light">Radar</span>
+          </span>
+        </a>
+        <nav>
+          <a href="#jobs">Explore jobs</a>
+          <a href="#about">About</a>
+        </nav>
+        <a className="top-cta" href="#jobs">
+          Find your first job <span>↗</span>
+        </a>
+      </header>
+
+      <main>
+        <section className="hero">
+          <div className="hero-content">
+            <div className="eyebrow">
+              <span className="pulse-dot" /> YOUR CAREER STARTS HERE
+            </div>
+            <h1>
+              Your first job.
+              <br />
+              Your <span className="gradient-text">next big thing.</span>
+            </h1>
+            <p className="hero-description">
+              A curated radar for internships and entry-level jobs. Less noise,
+              more opportunities to get started.
+            </p>
+
+            <form className="search-panel" onSubmit={handleSearch}>
+              <div className="search-field keyword-field">
+                <span className="field-icon">⌕</span>
+                <div className="field-content">
+                  <label htmlFor="keyword">WHAT ARE YOU LOOKING FOR?</label>
+                  <input
+                    id="keyword"
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    placeholder="Job title, skill or company"
+                  />
+                </div>
+              </div>
+
+              <div className="search-divider" />
+
+              <div className="search-field location-field">
+                <span className="field-icon">⌖</span>
+                <div className="field-content">
+                  <label htmlFor="city">LOCATION</label>
+                  <input
+                    id="city"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="City or anywhere"
+                  />
+                </div>
+              </div>
+
+              <button className="search-button" type="submit">
+                Search jobs <span>→</span>
+              </button>
+            </form>
+
+            <div className="hero-meta">
+              <span>✦ Built for freshers</span>
+              <span>◈ AI-powered job tagging</span>
+              <span>↗ Direct application links</span>
+            </div>
+          </div>
+
+          <div className="hero-decoration" aria-hidden="true">
+            <div className="orbit orbit-outer" />
+            <div className="orbit orbit-inner" />
+            <div className="radar-center">
+              <span>✳</span>
+            </div>
+            <div className="radar-point point-one" />
+            <div className="radar-point point-two" />
+            <div className="radar-point point-three" />
+            <div className="radar-point point-four" />
+            <div className="radar-label label-one">OPPORTUNITY DETECTED</div>
+            <div className="radar-label label-two">01 / 05</div>
+          </div>
+        </section>
+
+        <section className="jobs-section" id="jobs">
+          <div className="section-heading">
+            <div>
+              <div className="eyebrow section-eyebrow">THE RADAR IS ON</div>
+              <h2>
+                Explore opportunities<span className="heading-dot">.</span>
+              </h2>
+              <p className="section-subtitle">
+                Real openings. Fresh beginnings.
+              </p>
+            </div>
+            <div className="job-count">
+              <span className="count-number">{jobs.length}</span>
+              <span className="count-label">OPPORTUNITIES</span>
+            </div>
+          </div>
+
+          <div className="filter-row">
+            <div className="filter-label">FILTER BY ROLE</div>
+            <div className="role-filters">
+              {[
+                "",
+                "Software Engineering",
+                "Operations",
+                "Marketing",
+                "HR",
+                "Customer Support",
+              ].map((item) => (
+                <button
+                  key={item || "all"}
+                  className={`filter-chip ${role === item ? "active" : ""}`}
+                  onClick={() => {
+                    setRole(item);
+                    setTimeout(fetchJobs, 0);
+                  }}
+                >
+                  {item || "All roles"}
+                </button>
+              ))}
+            </div>
+            <button className="clear-filters" onClick={resetFilters}>
+              Reset ↺
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="state-panel">
+              <div className="loader" />
+              <p>Scanning for opportunities...</p>
+            </div>
+          ) : error ? (
+            <div className="state-panel error-panel">
+              <p>{error}</p>
+              <button onClick={fetchJobs}>Retry ↻</button>
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="state-panel empty-panel">
+              <div className="empty-icon">⌕</div>
+              <h3>No jobs found on this scan.</h3>
+              <p>Try changing your search or filters.</p>
+              <button onClick={resetFilters}>Clear filters</button>
+            </div>
+          ) : (
+            <div className="job-grid">
+              {jobs.map((job) => (
+                <article
+                  className="job-card"
+                  key={`${job.source}-${job.source_id}`}
+                >
+                  <div className="card-top">
+                    <div className="company-avatar">
+                      {job.company.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="company-info">
+                      <span className="company-name">{job.company}</span>
+                      <span className="job-location">
+                        ⌖ {job.city || job.location || "India"}
+                      </span>
+                    </div>
+                    <span className="fresh-badge">
+                      <span>✳</span> FRESHER
+                    </span>
+                  </div>
+
+                  <h3 className="job-title">{job.title}</h3>
+                  <div className="job-tags">
+                    {job.role_category && (
+                      <span className="tag role-tag">{job.role_category}</span>
+                    )}
+                    {job.job_type && (
+                      <span className="tag">{job.job_type}</span>
+                    )}
+                    {job.workplace_type && (
+                      <span className="tag">{job.workplace_type}</span>
+                    )}
+                  </div>
+
+                  <p className="job-description">
+                    {job.description
+                      ?.replace(/<[^>]*>/g, " ")
+                      .replace(/&nbsp;/g, " ")
+                      .replace(/&amp;/g, "&")
+                      .replace(/&lt;/g, "<")
+                      .replace(/&gt;/g, ">")
+                      .replace(/\s+/g, " ")
+                      .trim()
+                      .slice(0, 190)}
+                    {job.description?.length > 190 ? "..." : ""}
+                  </p>
+
+                  <div className="card-footer">
+                    <div className="verified-label">
+                      <span>✓</span> AI screened
+                    </div>
+                    <a
+                      className="apply-link"
+                      href={job.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Apply now <span>↗</span>
+                    </a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="about-strip" id="about">
+          <div className="about-symbol">✳</div>
+          <div>
+            <h3>Built to make the beginning easier.</h3>
+            <p>
+              We scan public job boards, filter entry-level opportunities and
+              organize them so you can focus on what matters: getting started.
+            </p>
+          </div>
+          <span className="about-side">
+            THE RADAR
+            <br />
+            FOR YOUR FUTURE
+          </span>
+        </section>
+      </main>
+
+      <footer>
+        <a className="brand footer-brand" href="#">
+          <span className="brand-mark">✳</span>
+          <span>
+            FreshersJob<span className="brand-light">Radar</span>
+          </span>
+        </a>
+        <span>Made for the next generation of builders. © 2026</span>
+        <span className="footer-status">
+          <span className="pulse-dot" /> RADAR ACTIVE
+        </span>
+      </footer>
+    </div>
+  );
 }
+
+export default App;
