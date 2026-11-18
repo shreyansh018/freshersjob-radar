@@ -8,6 +8,8 @@ from app.pipeline.sources import GREENHOUSE_SOURCES, LEVER_SOURCES
 from app.pipeline.filters import filter_target_jobs
 from app.pipeline.dedup import deduplicate_jobs
 from app.pipeline.classifier import classify_job
+from app.pipeline.job_storage import save_jobs
+
 from app.pipeline.classification_cache import (
     initialize_cache,
     get_cached_classification,
@@ -332,6 +334,15 @@ async def run_ingestion():
         result["status"] == "success"
         and result["job"].is_fresher_friendly is False
         for result in classification_results
+    )
+
+    # STEP 5.5: SAVE FINAL JOBS TO DATABASE
+
+    saved_count = save_jobs(final_jobs)
+
+    print(
+        f"[DB SAVE] Saved/updated {saved_count} jobs.",
+        flush=True,
     )
 
     # STEP 6: REPORT DATA
