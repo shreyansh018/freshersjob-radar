@@ -21,6 +21,51 @@ type Job = {
 
 const API = "http://127.0.0.1:8000/api";
 
+// Clean HTML, encoded tags and entities from job descriptions.
+function cleanDescription(raw: string = ""): string {
+  let text = raw;
+
+  // Decode common HTML entities and escaped markup.
+  const entities: Record<string, string> = {
+    "&nbsp;": " ",
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&apos;": "'",
+    "&ndash;": "–",
+    "&mdash;": "—",
+    "&bull;": "•",
+  };
+
+  for (let i = 0; i < 3; i++) {
+    text = text.replace(
+      /&(?:nbsp|amp|lt|gt|quot|apos|ndash|mdash|bull);|&#39;/gi,
+      (entity) => entities[entity.toLowerCase()] ?? entity,
+    );
+  }
+
+  // Remove script and style blocks entirely.
+  text = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ");
+  text = text.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ");
+
+  // Convert common structural tags to spaces.
+  text = text.replace(
+    /<\/?(?:p|div|h[1-6]|li|ul|ol|br|section|article|tr|td|th)[^>]*>/gi,
+    " ",
+  );
+
+  // Remove remaining HTML tags.
+  text = text.replace(/<[^>]*>/g, " ");
+
+  // Remove leftover encoded markup.
+  text = text.replace(/&lt;[^&]*&gt;/gi, " ");
+
+  // Normalize whitespace.
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -34,13 +79,19 @@ function App() {
     setError("");
 
     try {
-      const params = new URLSearchParams({ fresher_only: "true" });
+      const params = new URLSearchParams({
+        fresher_only: "true",
+      });
+
       if (keyword.trim()) params.set("keyword", keyword.trim());
       if (city.trim()) params.set("city", city.trim());
       if (role.trim()) params.set("role", role.trim());
 
       const response = await fetch(`${API}/jobs?${params.toString()}`);
-      if (!response.ok) throw new Error("Unable to fetch jobs.");
+
+      if (!response.ok) {
+        throw new Error("Unable to fetch jobs.");
+      }
 
       const data = await response.json();
       setJobs(data.jobs ?? []);
@@ -74,7 +125,10 @@ function App() {
     setKeyword("");
     setCity("");
     setRole("");
-    setTimeout(fetchJobs, 0);
+
+    setTimeout(() => {
+      fetchJobs();
+    }, 0);
   }
 
   return (
@@ -86,10 +140,12 @@ function App() {
             FreshersJob<span className="brand-light">Radar</span>
           </span>
         </a>
+
         <nav>
           <a href="#jobs">Explore jobs</a>
           <a href="#about">About</a>
         </nav>
+
         <a className="top-cta" href="#jobs">
           Find your first job <span>↗</span>
         </a>
@@ -101,11 +157,13 @@ function App() {
             <div className="eyebrow">
               <span className="pulse-dot" /> YOUR CAREER STARTS HERE
             </div>
+
             <h1>
               Your first job.
               <br />
               Your <span className="gradient-text">next big thing.</span>
             </h1>
+
             <p className="hero-description">
               A curated radar for internships and entry-level jobs. Less noise,
               more opportunities to get started.
@@ -114,8 +172,10 @@ function App() {
             <form className="search-panel" onSubmit={handleSearch}>
               <div className="search-field keyword-field">
                 <span className="field-icon">⌕</span>
+
                 <div className="field-content">
                   <label htmlFor="keyword">WHAT ARE YOU LOOKING FOR?</label>
+
                   <input
                     id="keyword"
                     value={keyword}
@@ -129,8 +189,10 @@ function App() {
 
               <div className="search-field location-field">
                 <span className="field-icon">⌖</span>
+
                 <div className="field-content">
                   <label htmlFor="city">LOCATION</label>
+
                   <input
                     id="city"
                     value={city}
@@ -155,14 +217,18 @@ function App() {
           <div className="hero-decoration" aria-hidden="true">
             <div className="orbit orbit-outer" />
             <div className="orbit orbit-inner" />
+
             <div className="radar-center">
               <span>✳</span>
             </div>
+
             <div className="radar-point point-one" />
             <div className="radar-point point-two" />
             <div className="radar-point point-three" />
             <div className="radar-point point-four" />
+
             <div className="radar-label label-one">OPPORTUNITY DETECTED</div>
+
             <div className="radar-label label-two">01 / 05</div>
           </div>
         </section>
@@ -171,13 +237,16 @@ function App() {
           <div className="section-heading">
             <div>
               <div className="eyebrow section-eyebrow">THE RADAR IS ON</div>
+
               <h2>
                 Explore opportunities<span className="heading-dot">.</span>
               </h2>
+
               <p className="section-subtitle">
                 Real openings. Fresh beginnings.
               </p>
             </div>
+
             <div className="job-count">
               <span className="count-number">{jobs.length}</span>
               <span className="count-label">OPPORTUNITIES</span>
@@ -186,6 +255,7 @@ function App() {
 
           <div className="filter-row">
             <div className="filter-label">FILTER BY ROLE</div>
+
             <div className="role-filters">
               {[
                 "",
@@ -200,13 +270,14 @@ function App() {
                   className={`filter-chip ${role === item ? "active" : ""}`}
                   onClick={() => {
                     setRole(item);
-                    setTimeout(fetchJobs, 0);
+                    setTimeout(() => fetchJobs(), 0);
                   }}
                 >
                   {item || "All roles"}
                 </button>
               ))}
             </div>
+
             <button className="clear-filters" onClick={resetFilters}>
               Reset ↺
             </button>
@@ -231,80 +302,88 @@ function App() {
             </div>
           ) : (
             <div className="job-grid">
-              {jobs.map((job) => (
-                <article
-                  className="job-card"
-                  key={`${job.source}-${job.source_id}`}
-                >
-                  <div className="card-top">
-                    <div className="company-avatar">
-                      {job.company.slice(0, 1).toUpperCase()}
-                    </div>
-                    <div className="company-info">
-                      <span className="company-name">{job.company}</span>
-                      <span className="job-location">
-                        ⌖ {job.city || job.location || "India"}
+              {jobs.map((job) => {
+                const description = cleanDescription(job.description);
+
+                return (
+                  <article
+                    className="job-card"
+                    key={`${job.source}-${job.source_id}`}
+                  >
+                    <div className="card-top">
+                      <div className="company-avatar">
+                        {job.company.slice(0, 1).toUpperCase()}
+                      </div>
+
+                      <div className="company-info">
+                        <span className="company-name">{job.company}</span>
+
+                        <span className="job-location">
+                          ⌖ {job.city || job.location || "India"}
+                        </span>
+                      </div>
+
+                      <span className="fresh-badge">
+                        <span>✳</span> FRESHER
                       </span>
                     </div>
-                    <span className="fresh-badge">
-                      <span>✳</span> FRESHER
-                    </span>
-                  </div>
 
-                  <h3 className="job-title">{job.title}</h3>
-                  <div className="job-tags">
-                    {job.role_category && (
-                      <span className="tag role-tag">{job.role_category}</span>
-                    )}
-                    {job.job_type && (
-                      <span className="tag">{job.job_type}</span>
-                    )}
-                    {job.workplace_type && (
-                      <span className="tag">{job.workplace_type}</span>
-                    )}
-                  </div>
+                    <h3 className="job-title">{job.title}</h3>
 
-                  <p className="job-description">
-                    {job.description
-                      ?.replace(/<[^>]*>/g, " ")
-                      .replace(/&nbsp;/g, " ")
-                      .replace(/&amp;/g, "&")
-                      .replace(/&lt;/g, "<")
-                      .replace(/&gt;/g, ">")
-                      .replace(/\s+/g, " ")
-                      .trim()
-                      .slice(0, 190)}
-                    {job.description?.length > 190 ? "..." : ""}
-                  </p>
+                    <div className="job-tags">
+                      {job.role_category && (
+                        <span className="tag role-tag">
+                          {job.role_category}
+                        </span>
+                      )}
 
-                  <div className="card-footer">
-                    <div className="verified-label">
-                      <span>✓</span> AI screened
+                      {job.job_type && (
+                        <span className="tag">{job.job_type}</span>
+                      )}
+
+                      {job.workplace_type && (
+                        <span className="tag">{job.workplace_type}</span>
+                      )}
                     </div>
-                    <a
-                      className="apply-link"
-                      href={job.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Apply now <span>↗</span>
-                    </a>
-                  </div>
-                </article>
-              ))}
+
+                    <p className="job-description">
+                      {description.slice(0, 190)}
+                      {description.length > 190 ? "..." : ""}
+                    </p>
+
+                    <div className="card-footer">
+                      <div className="verified-label">
+                        <span>✓</span> AI screened
+                      </div>
+
+                      <a
+                        className="apply-link"
+                        href={job.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Apply now <span>↗</span>
+                      </a>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
 
         <section className="about-strip" id="about">
           <div className="about-symbol">✳</div>
+
           <div>
             <h3>Built to make the beginning easier.</h3>
+
             <p>
               We scan public job boards, filter entry-level opportunities and
               organize them so you can focus on what matters: getting started.
             </p>
           </div>
+
           <span className="about-side">
             THE RADAR
             <br />
@@ -316,11 +395,14 @@ function App() {
       <footer>
         <a className="brand footer-brand" href="#">
           <span className="brand-mark">✳</span>
+
           <span>
             FreshersJob<span className="brand-light">Radar</span>
           </span>
         </a>
+
         <span>Made for the next generation of builders. © 2026</span>
+
         <span className="footer-status">
           <span className="pulse-dot" /> RADAR ACTIVE
         </span>
