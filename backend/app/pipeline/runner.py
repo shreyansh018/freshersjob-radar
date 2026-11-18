@@ -228,13 +228,44 @@ async def run_ingestion():
             )
 
             try:
-                # Pace Gemini calls to reduce free-tier RPM errors.
-                await asyncio.sleep(5)
-                result = await asyncio.to_thread(
-                    classify_job,
-                    job,
-                )
+                result = None
 
+                for retry_attempt in range(3):
+                    try:
+                        result = await asyncio.to_thread(
+                            classify_job,
+                            job,
+                        )
+                        break
+
+                    except Exception as retry_exc:
+                        error_text = str(retry_exc)
+
+                        is_retryable = (
+                            "503" in error_text
+                            or "429" in error_text
+                            or "UNAVAILABLE" in error_text
+                            or "RESOURCE_EXHAUSTED" in error_text
+                        )
+
+                        if (
+                            not is_retryable
+                            or retry_attempt == 2
+                        ):
+                            raise
+
+                        retry_delay = 15 * (2 ** retry_attempt)
+
+                        print(
+                            f"[AI RETRY] {job.title} | "
+                            f"Attempt {retry_attempt + 1}/3 | "
+                            f"Waiting {retry_delay}s",
+                            flush=True,
+                        )
+
+                        await asyncio.sleep(retry_delay)
+
+                assert result is not None
                 result_dict = result.model_dump()
 
                 apply_result_to_job(job, result_dict)
