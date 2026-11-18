@@ -18,5 +18,5 @@ GREENHOUSE_SOURCES = [
 ]
 
 LEVER_SOURCES = [
-    # We'll add verified Lever boards in the next step.
+    LeverSource("Employ", "employ"),
 ]
