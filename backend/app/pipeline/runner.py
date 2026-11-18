@@ -19,7 +19,7 @@ from app.pipeline.classification_cache import (
 
 
 MAX_SOURCE_CONCURRENCY = 5
-MAX_AI_CONCURRENCY = 3
+MAX_AI_CONCURRENCY = 1
 
 
 async def run_ingestion():
@@ -228,6 +228,8 @@ async def run_ingestion():
             )
 
             try:
+                # Pace Gemini calls to reduce free-tier RPM errors.
+                await asyncio.sleep(5)
                 result = await asyncio.to_thread(
                     classify_job,
                     job,
