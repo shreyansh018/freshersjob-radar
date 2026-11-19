@@ -1,19 +1,38 @@
-
-# Secrets
+# Secrets / environment variables
+.env
+.env.*
+!*.env.example
 backend/.env
+backend/.env.*
 
 # Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
+*.egg-info/
 
-# Virtual environments
+# Python virtual environments
 venv/
 .venv/
+backend/.venv/
 
-# IDE
-.vscode/
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
-# Local database
+# Local data / databases / generated audits
 backend/data/
 *.db
+*.sqlite
+*.sqlite3
+
+# Evaluation artifacts
+.deepeval/
+backend/.deepeval/
+
+# IDE / OS files
+.vscode/
+.DS_Store
+Thumbs.db
