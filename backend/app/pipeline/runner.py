@@ -371,7 +371,7 @@ async def run_ingestion():
 
     # STEP 5.5: SAVE FINAL JOBS TO DATABASE
 
-    saved_count = save_jobs(final_jobs)
+    saved_count = save_jobs(classified_jobs)
 
     print(
         f"[DB SAVE] Saved/updated {saved_count} jobs.",
