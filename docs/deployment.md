@@ -75,7 +75,7 @@ Set these Project Environment Variables for Production:
 | `GEMINI_API_KEY` | server-side only; never in the frontend |
 | `SECRET_KEY` | new random string (invalidates local sessions) |
 | `CRON_SECRET` | new random string used by Vercel Cron |
-| `REGISTRATION_ENABLED` | `false` (recommended for a public URL) |
+| `REGISTRATION_ENABLED` | `true` for the public demo (sign-up is rate-limited to 5 attempts / 5 min); set `false` if you want an invite-only instance |
 | `COOKIE_SECURE` | `true` (also derived automatically from `ENVIRONMENT`) |
 | `CORS_ORIGINS` | your `https://<project>.vercel.app` URL |
 
