@@ -8,7 +8,7 @@ from app.core.security import create_access_token, generate_csrf_token, hash_pas
 from app.db.session import get_db
 from app.models import User
 from app.schemas.user import LoginRequest, RegisterRequest, UserOut
-from app.services.auth_service import authenticate, get_current_user
+from app.services.auth_service import authenticate, get_optional_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -68,9 +68,9 @@ async def logout(response: Response) -> dict:
     return {"ok": True}
 
 
-@router.get("/me", response_model=UserOut)
-async def me(user: User = Depends(get_current_user)) -> UserOut:
-    return UserOut.model_validate(user)
+@router.get("/me", response_model=UserOut | None)
+async def me(user: User | None = Depends(get_optional_user)) -> UserOut | None:
+    return UserOut.model_validate(user) if user else None
 
 
 @router.post("/password-reset/request")

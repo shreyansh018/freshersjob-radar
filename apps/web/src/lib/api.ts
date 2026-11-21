@@ -64,7 +64,7 @@ export const api = {
   register: (email: string, password: string) =>
     request<User>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
-  me: () => request<User>("/auth/me"),
+  me: () => request<User | null>("/auth/me"),
 
   savedJobs: () => request<Array<{ saved_at: string; job: JobSummary }>>("/users/me/saved-jobs"),
   saveJob: (id: string) => request<{ saved: boolean }>(`/users/me/saved-jobs/${id}`, { method: "POST" }),

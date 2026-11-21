@@ -34,6 +34,29 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> User | None:
+    """Like get_current_user, but anonymous callers get None instead of a 401.
+
+    The web app uses /auth/me to discover the current session on every load.
+    Returning 200 with null avoids a noisy browser-console 401 for signed-out
+    visitors while keeping authenticated behaviour unchanged.
+    """
+    token = extract_token(request)
+    payload = decode_access_token(token) if token else None
+    if not payload or not payload.get("sub"):
+        return None
+    try:
+        user_id = uuid.UUID(str(payload["sub"]))
+    except ValueError:
+        return None
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user or user.status != "active":
+        return None
+    return user
+
+
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
