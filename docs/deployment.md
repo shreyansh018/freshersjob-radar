@@ -100,11 +100,15 @@ Hobby maximum). The fan-out is still the safer default.
 Push to the connected branch, then check the production URL:
 
 1. `/api/v1/health` → `{"status":"ok","database":"ok","redis":"ok"}`.
-2. Landing stats show the restored `689` real jobs.
+2. Landing stats show the restored real jobs (`689` at cutover; daily ingestion
+   grows this honestly).
 3. Sign in with the admin account → navbar shows `Hi, <name>`.
 4. Save a job, edit preferences, open the admin overview.
-5. `GET /api/v1/internal/cron/ingest` without the secret → `401`.
-6. Browser console is clean; job detail links still go to employer sites.
+5. `POST /api/v1/internal/cron/ingest` without the secret → `401`; with the
+   secret → `200` and a queued task id.
+6. `vercel inspect <deployment>` lists both `services/api/fastapi` and
+   `services/api/_py_subscribers/app-workers-worker__app`.
+7. Browser console is clean; job detail links still go to employer sites.
 
 ## Known limitations
 
