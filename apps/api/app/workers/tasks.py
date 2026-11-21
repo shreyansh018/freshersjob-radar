@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import uuid
 from datetime import datetime, timezone
 
@@ -14,11 +15,23 @@ from app.workers.celery_app import celery_app
 logger = get_logger("workers.tasks")
 
 
+def _run_async(coro):
+    """Run a coroutine from Celery, including inside Vercel's async worker loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    # Vercel's Celery adapter executes tasks inside an event loop. A dedicated
+    # thread gives asyncio.run() a fresh loop without blocking that loop.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(asyncio.run, coro).result()
+
+
 @celery_app.task(name="ingestion.ingest_all", bind=True, max_retries=1)
 def ingest_all_task(self):
     """Full cycle. Used by local Docker; too long for a single Vercel function."""
     try:
-        return asyncio.run(ingest_all())
+        return _run_async(ingest_all())
     except Exception as exc:
         logger.error("ingestion_task_failed", error=str(exc))
         raise self.retry(exc=exc, countdown=60)
@@ -60,7 +73,7 @@ async def _ingest_one_source(source_id: uuid.UUID) -> dict:
 def ingest_one_source_task(self, source_id: str):
     """Vercel-safe ingestion unit: one ATS board per queue invocation."""
     try:
-        return asyncio.run(_ingest_one_source(uuid.UUID(source_id)))
+        return _run_async(_ingest_one_source(uuid.UUID(source_id)))
     except Exception as exc:
         logger.error("source_ingestion_failed", source_id=source_id, error=str(exc))
         raise self.retry(exc=exc, countdown=60)
@@ -75,7 +88,7 @@ async def _enabled_source_ids() -> list[str]:
 @celery_app.task(name="ingestion.fan_out")
 def fan_out_ingestion_task() -> dict:
     """Enqueue one task per enabled board. Called by Vercel Cron."""
-    source_ids = asyncio.run(_enabled_source_ids())
+    source_ids = _run_async(_enabled_source_ids())
     for source_id in source_ids:
         ingest_one_source_task.delay(source_id)
     logger.info("ingestion_fanned_out", sources=len(source_ids))
@@ -84,9 +97,9 @@ def fan_out_ingestion_task() -> dict:
 
 @celery_app.task(name="maintenance.expire_unconfirmed")
 def expire_unconfirmed_task() -> int:
-    return asyncio.run(expire_unconfirmed_jobs())
+    return _run_async(expire_unconfirmed_jobs())
 
 
 @celery_app.task(name="maintenance.source_health")
 def source_health_task() -> int:
-    return asyncio.run(mark_degraded_sources())
+    return _run_async(mark_degraded_sources())
