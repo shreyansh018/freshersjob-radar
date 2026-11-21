@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+::selection {
+  background: #e0e7ff;
+  color: #312e81;
+}

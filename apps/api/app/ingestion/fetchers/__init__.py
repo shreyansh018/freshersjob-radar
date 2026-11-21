@@ -1,0 +1,1 @@
+"""Public ATS fetcher adapters."""
