@@ -4,7 +4,7 @@ Locally a single process handles every call, so an in-process lock is enough.
 On Vercel each invocation is a separate process; the Redis-backed path gives
 all invocations one budget instead of one budget per function instance.
 
-The Redis path is a sliding window implemented with ``PSETEX ... NX``: the key
+The Redis path is a sliding window implemented with ``SET ... PX NX``: the key
 lives for exactly the configured minimum interval, so a new call can only be
 reserved after the previous reservation expires. A daily-quota flag is stored
 with a TTL so a throttled deployment stops making pointless calls.
@@ -48,7 +48,9 @@ async def wait_for_slot() -> None:
     interval_ms = max(1, int(settings.gemini_min_interval_seconds * 1000))
     try:
         while True:
-            acquired = await client.psetex(_SLOT_KEY, interval_ms, "1", nx=True)
+            # SET ... PX NX is supported by every redis-py version we target;
+            # psetex() here has no nx parameter.
+            acquired = await client.set(_SLOT_KEY, "1", px=interval_ms, nx=True)
             if acquired:
                 return
             await asyncio.sleep(1)
