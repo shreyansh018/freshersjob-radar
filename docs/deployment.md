@@ -79,14 +79,17 @@ Set these Project Environment Variables for Production:
 | `COOKIE_SECURE` | `true` (also derived automatically from `ENVIRONMENT`) |
 | `CORS_ORIGINS` | your `https://<project>.vercel.app` URL |
 
-`vercel.json` contains three Cron entries; Vercel automatically sends
+`vercel.json` contains one daily Cron entry (Hobby accounts are limited to
+schedules that run at most once per day). Vercel automatically sends
 `Authorization: Bearer $CRON_SECRET` on each GET request:
 
 | Schedule (UTC) | Path | Purpose |
 |---|---|---|
-| `0 2 * * *` | `/api/v1/internal/cron/ingest` | fan out one ingestion task per source |
-| `0 * * * *` | `/api/v1/internal/cron/freshness` | expire unconfirmed jobs |
-| `0 */6 * * *` | `/api/v1/internal/cron/source-health` | source health checks |
+| `0 2 * * *` | `/api/v1/internal/cron/ingest` | fan out one ingestion task per source, then expire stale jobs and check source health |
+
+The separate `/api/v1/internal/cron/freshness` and `/cron/source-health` routes
+still exist. On Pro you can add hourly and six-hourly Cron entries pointing at
+them to restore the original Celery Beat cadence.
 
 If you move to Pro and want a single large task instead of the fan-out, raise
 `maxDuration` for `app/main.py` in the `api` service (up to 800s; 300s is the

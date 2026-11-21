@@ -33,3 +33,5 @@ data/raw/
 data/exports/
 *.log
 *.dump
+
+.vercel

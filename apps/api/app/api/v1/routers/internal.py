@@ -25,8 +25,24 @@ def require_cron_secret(authorization: str | None = Header(default=None)) -> Non
 
 @router.api_route("/cron/ingest", methods=["GET", "POST"], dependencies=[Depends(require_cron_secret)])
 async def cron_ingest() -> dict:
-    result = fan_out_ingestion_task.delay()
-    return {"task_id": result.id, "status": "queued"}
+    """Daily maintenance run.
+
+    Hobby Vercel accounts only allow cron jobs that run at most once per day,
+    so ingestion, freshness and source health are queued together here. On Pro,
+    use the separate /cron/freshness and /cron/source-health routes to restore
+    the original hourly / six-hourly schedules.
+    """
+    ingest = fan_out_ingestion_task.delay()
+    freshness = expire_unconfirmed_task.delay()
+    health = source_health_task.delay()
+    return {
+        "status": "queued",
+        "task_ids": {
+            "ingest": ingest.id,
+            "freshness": freshness.id,
+            "source_health": health.id,
+        },
+    }
 
 
 @router.api_route("/cron/freshness", methods=["GET", "POST"], dependencies=[Depends(require_cron_secret)])
