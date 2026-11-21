@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: frj-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-freshers}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-freshers_password}
+      POSTGRES_DB: ${POSTGRES_DB:-freshersjobs}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-freshers} -d ${POSTGRES_DB:-freshersjobs}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: frj-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    container_name: frj-api
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: ./apps/api
+    container_name: frj-worker
+    env_file:
+      - .env
+    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "-Q", "ingestion,classification,maintenance", "-n", "worker@%h", "--concurrency=4"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build:
+      context: ./apps/api
+    container_name: frj-beat
+    env_file:
+      - .env
+    command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+    container_name: frj-web
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:

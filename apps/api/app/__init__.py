@@ -1,0 +1,1 @@
+"""FreshersJob Radar API package."""
